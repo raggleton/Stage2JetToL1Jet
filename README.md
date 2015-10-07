@@ -9,7 +9,7 @@ Note that it uses the hardware values for et, eta, phi, and thus assumes standar
 Inside a CMSSW release, in `$CMSSW_BASE/src`:
 
 ```
-git clone L1Trigger/Stage2JetToL1Jet
+git clone https://github.com/raggleton/Stage2JetToL1Jet.git L1Trigger/Stage2JetToL1Jet
 scram b -j9
 ```
 
@@ -18,12 +18,9 @@ scram b -j9
 Add to your config file:
 
 ```
-process.stage2JetToL1Jets = cms.EDProducer('Stage2JetToL1Jet',
-    stage2JetSource = cms.InputTag("caloStage2Digis:MP"),
-    jetLsb = cms.double(0.5)
-)
+process.load('L1Trigger.Stage2JetToL1Jet.stage2JetToL1Jet_cfi')
 ```
 
-then add `process.stage2JetToL1Jets` to your `process` path after `process.caloStage2Digis`.
+then add `process.stage2JetToL1Jet` to your `process` path after `process.caloStage2Digis`.
 
 Note that this uses the jets *before* demuxing - is this what you want?
