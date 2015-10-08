@@ -5,9 +5,9 @@
 // 
 /**\class Stage2JetToL1Jet Stage2JetToL1Jet.cc L1Trigger/Stage2JetToL1Jet/plugins/Stage2JetToL1Jet.cc
 
- Description: EDProducer to turn preGtJets (as JetBxCollection i.e. BXVector<Jet>) into L1JetParticles.
- It uses the hardware values for pt, eta, phi, and converts them to physical values.
- Output can then be passed into l1ExtraTreeProducer.
+ Description: EDProducer to convert HW values in Stage 2 jets to physical values.
+ It also converts the Stage 2 Jets into L1JetParticles.
+ Output can then be passed into l1UpgradeTreeProducer, or l1ExtraTreeProducer.
 
  Implementation:
      This is specific to Stage 2, since eta and phi have trigger tower granularity,
@@ -91,6 +91,7 @@ Stage2JetToL1Jet::Stage2JetToL1Jet(const edm::ParameterSet& iConfig):
   //register your products
   produces<L1JetParticleCollection>("Central");
   produces<L1JetParticleCollection>("Forward");
+  produces<l1t::JetBxCollection>();
 
   //now do what ever other initialization is needed
   stage2JetToken_ = consumes<l1t::JetBxCollection>(stage2JetSource_);
@@ -128,10 +129,11 @@ Stage2JetToL1Jet::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   auto_ptr<L1JetParticleCollection> cenJetColl(new L1JetParticleCollection);
   auto_ptr<L1JetParticleCollection> fwdJetColl(new L1JetParticleCollection);
-
+  auto_ptr<l1t::JetBxCollection> newJetColl(new l1t::JetBxCollection);
   // Loop over BX
   int firstBX = stage2JetCollection->getFirstBX();
   int lastBX = stage2JetCollection->getLastBX();
+  newJetColl->setBXRange(firstBX, lastBX);
 
   for (int itBX = firstBX; itBX!=lastBX+1; ++itBX) {
     // Loop over each obj, make a l1extra::L1JetParticle obj from it
@@ -139,17 +141,21 @@ Stage2JetToL1Jet::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
     l1t::JetBxCollection::const_iterator jetEnd = stage2JetCollection->end(itBX);
     for( ; jetItr != jetEnd ; ++jetItr) {
       // get pt, eta, phi from HW values, convert to 4 vec.
-      math::PtEtaPhiMLorentzVector fourMom = hwToLorentzVector(jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetLsb_);
-      if (abs(fourMom.eta()) < 3) {
-        cenJetColl->push_back(L1JetParticle(fourMom, L1JetParticle::JetType::kCentral, itBX));
+      math::PtEtaPhiMLorentzVector p4 = hwToLorentzVector(jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetLsb_);
+      l1t::Jet jet(p4, jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetItr->hwQual());
+      newJetColl->push_back(itBX, jet);
+
+      if (abs(p4.eta()) < 3) {
+        cenJetColl->push_back(L1JetParticle(p4, L1JetParticle::JetType::kCentral, itBX));
       } else {
-        fwdJetColl->push_back(L1JetParticle(fourMom, L1JetParticle::JetType::kForward, itBX));
+        fwdJetColl->push_back(L1JetParticle(p4, L1JetParticle::JetType::kForward, itBX));
       }
     }
   }
 
   OrphanHandle< L1JetParticleCollection > cenJetHandle = iEvent.put(cenJetColl, "Central");
   OrphanHandle< L1JetParticleCollection > fwdJetHandle = iEvent.put(fwdJetColl, "Forward");
+  OrphanHandle< l1t::JetBxCollection > newJetHandle = iEvent.put(newJetColl);
 }
 
 
