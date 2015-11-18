@@ -60,7 +60,7 @@ class Stage2JetToL1Jet : public edm::EDProducer {
     //virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
     //virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
 
-    virtual math::PtEtaPhiMLorentzVector hwToLorentzVector(int hwPt, int hwEta, int hwPhi, double jetLsb);
+    virtual math::PtEtaPhiMLorentzVector hwToLorentzVector(int hwPt, int hwEta, int hwPhi, double jetLsb, bool gtJets);
     virtual double trigTowerToEta(int hwEta);
     virtual double trigTowerToPhi(int hwPhi, bool forward);
 
@@ -68,6 +68,7 @@ class Stage2JetToL1Jet : public edm::EDProducer {
     const edm::InputTag stage2JetSource_;
     edm::EDGetTokenT<l1t::JetBxCollection> stage2JetToken_;
     const double jetLsb_;
+    const bool gtJets_;
 };
 
 //
@@ -84,7 +85,8 @@ class Stage2JetToL1Jet : public edm::EDProducer {
 //
 Stage2JetToL1Jet::Stage2JetToL1Jet(const edm::ParameterSet& iConfig):
   stage2JetSource_(iConfig.getParameter<edm::InputTag>("stage2JetSource")),
-  jetLsb_(iConfig.getParameter<double>("jetLsb"))
+  jetLsb_(iConfig.getParameter<double>("jetLsb")),
+  gtJets_(iConfig.getParameter<bool>("gtJets"))
 {
   using namespace l1extra;
 
@@ -137,11 +139,11 @@ Stage2JetToL1Jet::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   for (int itBX = firstBX; itBX!=lastBX+1; ++itBX) {
     // Loop over each obj, make a l1extra::L1JetParticle obj from it
-    l1t::JetBxCollection::const_iterator jetItr = stage2JetCollection->begin(itBX);
+    // l1t::JetBxCollection::const_iterator jetItr = stage2JetCollection->begin(itBX);
     l1t::JetBxCollection::const_iterator jetEnd = stage2JetCollection->end(itBX);
-    for( ; jetItr != jetEnd ; ++jetItr) {
+    for(auto jetItr = stage2JetCollection->begin(itBX); jetItr != jetEnd ; ++jetItr) {
       // get pt, eta, phi from HW values, convert to 4 vec.
-      math::PtEtaPhiMLorentzVector p4 = hwToLorentzVector(jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetLsb_);
+      math::PtEtaPhiMLorentzVector p4 = hwToLorentzVector(jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetLsb_, gtJets_);
       l1t::Jet jet(p4, jetItr->hwPt(), jetItr->hwEta(), jetItr->hwPhi(), jetItr->hwQual());
       newJetColl->push_back(itBX, jet);
 
@@ -218,12 +220,18 @@ Stage2JetToL1Jet::trigTowerToPhi(int hwPhi, bool forward)
  * @param hwEta Hardware eta (iEta)
  * @param hwPhi Hardware phi (iPhi)
  * @param jetLsb LSB for jet et scale, assumes linear et scale starting at 0.
+ * @param gtJets true for jets passed to Global Trigger, i.e. from demux. false otherwise.
  * @return [description]
  */
 math::PtEtaPhiMLorentzVector
-Stage2JetToL1Jet::hwToLorentzVector(int hwPt, int hwEta, int hwPhi, double jetLsb)
+Stage2JetToL1Jet::hwToLorentzVector(int hwPt, int hwEta, int hwPhi, double jetLsb, bool gtJets)
 {
   double pt = hwPt * jetLsb;
+  if (gtJets) {
+    // jets from demux have ieta/iphi * 2 relative to TT values.
+    hwEta *= 0.5;
+    hwPhi *= 0.5;
+  }
   double eta = trigTowerToEta(hwEta);
   bool fwd = abs(eta) > 3;
   double phi = trigTowerToPhi(hwPhi, fwd);
@@ -281,6 +289,7 @@ Stage2JetToL1Jet::fillDescriptions(edm::ConfigurationDescriptions& descriptions)
   edm::ParameterSetDescription desc;
   desc.add<edm::InputTag>("stage2JetSource", edm::InputTag(""))->setComment("Jet collection from Stage 2 emulator");
   desc.add<double>("jetLsb")->setComment("LSB for jet et scale.");
+  desc.add<bool>("gtJets")->setComment("True if jets come from demux, i.e. passed to global trigger.");
   descriptions.add("Stage2JetToL1Jet", desc);
 }
 
